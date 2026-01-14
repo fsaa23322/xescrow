@@ -9,7 +9,6 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// 3. 交易状态机
 enum OrderStatus {
   CREATED
   AGREED
@@ -22,7 +21,6 @@ enum OrderStatus {
   REFUNDED
 }
 
-// 4. 数据模型
 model User {
   id            String    @id @default(cuid())
   walletAddress String    @unique
@@ -49,6 +47,13 @@ model Order {
   tokenSymbol   String      @default("USDT")
   daysToDeliver Int
   status        OrderStatus @default(CREATED)
+  
+  // 新增：记录链上状态的数字 (0-8)，用于列表页直接显示
+  chainState    Int         @default(0) 
+  
+  // 新增：记录最后一次改变状态的人的钱包地址，用于红点提示
+  lastActionBy  String?
+
   contractId    String?
   txHash        String?
   
@@ -73,9 +78,7 @@ model Message {
   order     Order    @relation(fields: [orderId], references: [id])
   senderId  String
   sender    User     @relation(fields: [senderId], references: [id])
-  
-  isRead    Boolean  @default(false) // 新增：已读状态
-  
+  isRead    Boolean  @default(false)
   createdAt DateTime @default(now())
 
   @@map("messages")
