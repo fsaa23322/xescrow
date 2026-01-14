@@ -56,9 +56,10 @@ export default function DashboardPage() {
             const isBuyer = order.buyer?.walletAddress.toLowerCase() === address?.toLowerCase();
             const role = isBuyer ? '买家 (甲方)' : '卖家 (乙方)';
             
-            // 判断是否有新消息：最新一条消息存在，且发送者不是我
+            // 修正后的红点逻辑：最新消息存在 + 且未读 + 且发送者不是我
             const lastMsg = order.messages && order.messages[0];
-            const hasNewMsg = lastMsg && lastMsg.sender?.walletAddress.toLowerCase() !== address?.toLowerCase();
+            const isMe = lastMsg && lastMsg.sender?.walletAddress.toLowerCase() === address?.toLowerCase();
+            const hasNewMsg = lastMsg && !isMe && lastMsg.isRead === false;
             
             return (
               <Link key={order.id} href={`/order/${order.shortId}`}>

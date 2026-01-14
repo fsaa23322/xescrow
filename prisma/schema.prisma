@@ -3,7 +3,7 @@ generator client {
   provider = "prisma-client-js"
 }
 
-// 2. 数据源配置 (回归经典写法，直接读 .env)
+// 2. 数据源配置
 datasource db {
   provider = "mysql"
   url      = env("DATABASE_URL")
@@ -73,21 +73,24 @@ model Message {
   order     Order    @relation(fields: [orderId], references: [id])
   senderId  String
   sender    User     @relation(fields: [senderId], references: [id])
+  
+  isRead    Boolean  @default(false) // 新增：已读状态
+  
   createdAt DateTime @default(now())
 
   @@map("messages")
 }
 
 model Evidence {
-  id        String   @id @default(cuid())
-  fileUrl   String
-  fileType  String
+  id          String   @id @default(cuid())
+  fileUrl     String
+  fileType    String
   description String?
-  orderId   String
-  order     Order    @relation(fields: [orderId], references: [id])
-  uploaderId String
-  uploader  User     @relation(fields: [uploaderId], references: [id])
-  createdAt DateTime @default(now())
+  orderId     String
+  order       Order    @relation(fields: [orderId], references: [id])
+  uploaderId  String
+  uploader    User     @relation(fields: [uploaderId], references: [id])
+  createdAt   DateTime @default(now())
 
   @@map("evidences")
 }

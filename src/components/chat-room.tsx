@@ -7,7 +7,6 @@ import { Send, MessageSquare, Loader2, Lock } from 'lucide-react';
 import { useAccount } from 'wagmi';
 import { toast } from 'sonner';
 
-// 新增 orderStatus 属性
 export function ChatRoom({ orderId, currentUser, orderStatus }: { orderId: string, currentUser: any, orderStatus?: number }) {
   const [messages, setMessages] = useState<any[]>([]);
   const [input, setInput] = useState('');
@@ -15,15 +14,16 @@ export function ChatRoom({ orderId, currentUser, orderStatus }: { orderId: strin
   const scrollRef = useRef<HTMLDivElement>(null);
   const { address } = useAccount();
 
-  // 状态 2 是 InProgress。小于 2 (Created, Confirmed) 时不允许聊天。
-  // 也可以根据需要允许 Disputed(4) 等状态。这里只要 >= 2 即可。
   const isChatEnabled = orderStatus !== undefined && orderStatus >= 2;
 
   useEffect(() => {
     let isMounted = true;
     const fetchMessages = async () => {
       try {
-        const res = await fetch(`/api/messages?orderId=${orderId}`);
+        // 关键修改：带上 reader 参数，后端会把未读消息标为已读
+        const readerParam = address ? `&reader=${address}` : '';
+        const res = await fetch(`/api/messages?orderId=${orderId}${readerParam}`);
+        
         if (res.ok) {
           const data = await res.json();
           if (isMounted && Array.isArray(data)) {
@@ -40,11 +40,12 @@ export function ChatRoom({ orderId, currentUser, orderStatus }: { orderId: strin
       }
     };
 
-    fetchMessages();
-    const interval = setInterval(fetchMessages, 2000); 
-
-    return () => { isMounted = false; clearInterval(interval); };
-  }, [orderId]);
+    if (address) {
+      fetchMessages();
+      const interval = setInterval(fetchMessages, 2000); 
+      return () => { isMounted = false; clearInterval(interval); };
+    }
+  }, [orderId, address]);
 
   const sendMessage = async () => {
     if (!input.trim() || !address || !isChatEnabled) return;
@@ -66,7 +67,7 @@ export function ChatRoom({ orderId, currentUser, orderStatus }: { orderId: strin
 
       if (!res.ok) throw new Error("发送失败");
 
-      const refreshRes = await fetch(`/api/messages?orderId=${orderId}`);
+      const refreshRes = await fetch(`/api/messages?orderId=${orderId}&reader=${address}`);
       const newData = await refreshRes.json();
       setMessages(newData);
       setTimeout(() => scrollRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
@@ -92,7 +93,6 @@ export function ChatRoom({ orderId, currentUser, orderStatus }: { orderId: strin
       </CardHeader>
       
       <CardContent className="flex-1 overflow-y-auto p-4 space-y-4 bg-white relative">
-        {/* 如果聊天未开启，显示遮罩层 */}
         {!isChatEnabled && (
           <div className="absolute inset-0 bg-slate-50/80 backdrop-blur-sm z-10 flex flex-col items-center justify-center p-6 text-center">
             <Lock className="w-10 h-10 text-slate-400 mb-2" />
@@ -116,6 +116,7 @@ export function ChatRoom({ orderId, currentUser, orderStatus }: { orderId: strin
               <div className={`max-w-[85%] rounded-2xl px-4 py-2 text-sm shadow-sm ${isMe ? 'bg-blue-600 text-white rounded-br-none' : 'bg-slate-100 text-slate-800 border border-slate-200 rounded-bl-none'}`}>
                 <div className="break-all whitespace-pre-wrap">{msg.content}</div>
                 <div className={`text-[10px] mt-1 text-right ${isMe ? 'text-blue-200' : 'text-slate-400'}`}>
+                  {/* 已读状态逻辑可以后续细化，这里暂不显示对方是否已读 */}
                   {new Date(msg.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                 </div>
               </div>
