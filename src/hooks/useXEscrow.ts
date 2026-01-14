@@ -1,16 +1,27 @@
 import { useState, useCallback } from 'react';
-import { useWriteContract, useWaitForTransactionReceipt, useReadContract } from 'wagmi';
+import { useWriteContract, useWaitForTransactionReceipt, useReadContract, useAccount } from 'wagmi';
 import { parseEther } from 'viem';
-import { ESCROW_ABI, ESCROW_CONTRACT_ADDRESS, ERC20_ABI } from '@/lib/contracts';
+import { ESCROW_ABI, ESCROW_CONTRACT_ADDRESS } from '@/lib/contracts';
 import { toast } from 'sonner';
 
-// USDT 合约地址 (BSC 主网)
-const USDT_ADDRESS = "0x55d398326f99059fF775485246999027B3197955";
+// 1. 补回丢失的枚举 (Enums)
+export enum ProjectState {
+  Created = 0,
+  Confirmed = 1,
+  Deposited = 2,
+  WorkSubmitted = 3,
+  Completed = 4,
+  Disputed = 5,
+  Resolved = 6,
+  Cancelled = 7
+}
 
+// 2. 主 Hook (包含所有功能)
 export function useXEscrow() {
   const [isLoading, setIsLoading] = useState(false);
+  const { address } = useAccount();
 
-  // 1. 写入合约的 Hook
+  // 写入合约的基础 Hook
   const { 
     data: hash, 
     writeContract, 
@@ -18,13 +29,13 @@ export function useXEscrow() {
     error: writeError 
   } = useWriteContract();
 
-  // 2. 等待交易确认的 Hook
+  // 等待确认
   const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({
     hash,
   });
 
-  // 3. 创建担保交易 (Create Project)
-  const createEscrow = useCallback(async (
+  // --- 核心功能：创建项目 (修复了之前的类型错误) ---
+  const createProject = useCallback(async (
     title: string,
     amountStr: string,
     sellerAddress: string,
@@ -37,56 +48,81 @@ export function useXEscrow() {
 
     setIsLoading(true);
     try {
-      // 在这里我们严格按照 createProject 的 ABI 顺序传参:
-      // createProject(string _title, uint256 _amount, address _seller, uint256 _sellerDeposit, uint256 _daysToDeliver)
+      console.log("Creating project:", { title, amountStr, sellerAddress });
       
-      const amountBigInt = parseEther(amountStr); // 假设是 18 位精度
-
       writeContract({
         address: ESCROW_CONTRACT_ADDRESS,
         abi: ESCROW_ABI,
         functionName: 'createProject',
         args: [
-          title,                  // 1. 标题
-          amountBigInt,           // 2. 金额
-          sellerAddress as `0x${string}`, // 3. 卖家地址
-          BigInt(0),              // 4. 卖家押金 (暂时默认为0)
-          BigInt(durationDays)    // 5. 交付天数
+          title,                          // _title (string)
+          parseEther(amountStr),          // _amount (uint256 -> bigint)
+          sellerAddress as `0x${string}`, // _seller (address)
+          BigInt(0),                      // _sellerDeposit (uint256 -> bigint)
+          BigInt(durationDays)            // _daysToDeliver (uint256 -> bigint)
         ],
       });
-      
     } catch (err: any) {
-      console.error("创建失败:", err);
-      toast.error(err.message || "创建交易失败");
+      console.error("Create error:", err);
+      toast.error(err.message || "创建失败");
       setIsLoading(false);
     }
   }, [writeContract]);
 
-  // 4. 支付/确认交易 (Confirm Project) - 需要支付 USDT
-  // 注意：真实逻辑通常需要先 Approve USDT，这里简化为直接调用合约逻辑
-  // 如果合约需要原生币(BNB)，则需要 value 字段；如果走 USDT，则需确保 allowance 足够
-  const payEscrow = useCallback((projectId: string, amountStr: string) => {
-    setIsLoading(true);
-    try {
-        // 这里只是示例，实际主网合约如果收 USDT，通常需要先调用 USDT 的 approve
-        // 为了确保能跑通，我们这里先假设它是 confirmProject 逻辑
-        writeContract({
-            address: ESCROW_CONTRACT_ADDRESS,
-            abi: ESCROW_ABI,
-            functionName: 'confirmProject',
-            args: [BigInt(projectId)],
-        });
-    } catch (err) {
-        console.error(err);
-        setIsLoading(false);
-    }
+  // --- 其他功能 (对应 useEscrowActions) ---
+  const confirmProject = useCallback((projectId: string) => {
+    writeContract({
+      address: ESCROW_CONTRACT_ADDRESS,
+      abi: ESCROW_ABI,
+      functionName: 'confirmProject',
+      args: [BigInt(projectId)],
+    });
   }, [writeContract]);
 
+  const depositFunds = useCallback((projectId: string) => {
+    writeContract({
+      address: ESCROW_CONTRACT_ADDRESS,
+      abi: ESCROW_ABI,
+      functionName: 'depositFunds',
+      args: [BigInt(projectId)],
+    });
+  }, [writeContract]);
+
+  const submitWork = useCallback((projectId: string) => {
+    writeContract({
+      address: ESCROW_CONTRACT_ADDRESS,
+      abi: ESCROW_ABI,
+      functionName: 'submitWork',
+      args: [BigInt(projectId)],
+    });
+  }, [writeContract]);
+
+  const completeProject = useCallback((projectId: string) => {
+    writeContract({
+      address: ESCROW_CONTRACT_ADDRESS,
+      abi: ESCROW_ABI,
+      functionName: 'completeProject',
+      args: [BigInt(projectId)],
+    });
+  }, [writeContract]);
+
+  // 返回所有需要的属性
   return {
-    createEscrow,
-    payEscrow,
+    createProject,
+    confirmProject,
+    depositFunds,
+    submitWork,
+    completeProject,
     isLoading: isLoading || isWritePending || isConfirming,
     isSuccess: isConfirmed,
-    hash
+    hash,
+    // 为了兼容旧代码，这里也可以把函数再暴露一次
+    createEscrow: createProject, 
+    payEscrow: confirmProject 
   };
 }
+
+// 3. 补回丢失的别名导出 (Aliases)
+// 这样其他文件 import { useEscrowActions } 时就不会报错了
+export const useEscrowActions = useXEscrow;
+export const useProject = useXEscrow; // 简化处理，暂时复用同一个 hook
