@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAccount } from 'wagmi';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -18,9 +18,10 @@ const DEFAULT_TOKEN = "0x55d398326f99059fF775485246999027B3197955";
 export default function CreateOrderPage() {
   const router = useRouter();
   const { isConnected } = useAccount();
-  const { createProject, isPending } = useEscrowActions();
+  
+  // 1. 获取 isSuccess (上链确认状态) 和 hash
+  const { createProject, isPending, isSuccess, hash } = useEscrowActions();
 
-  // 表单状态
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -30,6 +31,35 @@ export default function CreateOrderPage() {
     duration: '24', // 默认 24 小时
     token: 'USDT'
   });
+
+  // 2. 监听上链状态：一旦链上确认，立即触发后端同步
+  useEffect(() => {
+    if (isSuccess && hash) {
+      const syncAndRedirect = async () => {
+        const toastId = toast.loading("链上已确认，正在同步订单...");
+        
+        try {
+          // 3. 关键步骤：主动请求 API 唤醒后端并强制同步
+          // 即使没有专门的 sync 接口，GET /api/orders 通常也会触发列表刷新或唤醒 DB 连接
+          await fetch('/api/orders'); 
+          
+          toast.dismiss(toastId);
+          toast.success("订单同步成功！即将跳转...");
+          
+          // 给一点时间让用户看到成功提示
+          setTimeout(() => {
+            router.push('/dashboard'); // 假设跳转到控制台
+          }, 1500);
+
+        } catch (e) {
+          toast.error("同步超时，请稍后在列表页手动刷新");
+          router.push('/dashboard');
+        }
+      };
+
+      syncAndRedirect();
+    }
+  }, [isSuccess, hash, router]);
 
   const handleCreate = async () => {
     if (!isConnected) {
@@ -43,30 +73,24 @@ export default function CreateOrderPage() {
     }
 
     try {
-      // 构造存储在合约上的 Terms 字符串
       const terms = JSON.stringify({ 
         title: formData.title, 
         desc: formData.description 
       });
       
-      // 转换时间：页面输入是小时，Hook 接收天数 (内部会 * 24 转回小时)
-      // 所以这里我们传 hours / 24
       const durationInDays = Number(formData.duration) / 24;
 
-      // 调用 Hook (参数顺序已修正)
+      // 发送交易
       await createProject(
-        terms,                  // 1. title (terms)
-        formData.amount,        // 2. amountStr
-        formData.sellerAddress, // 3. sellerAddress
-        DEFAULT_TOKEN,          // 4. tokenAddress
-        durationInDays          // 5. durationDays
+        terms,                  
+        formData.amount,        
+        formData.sellerAddress, 
+        DEFAULT_TOKEN,          
+        durationInDays          
       );
 
-      toast.success("订单创建成功！等待链上确认...");
-      
-      // 重置关键表单项
-      setFormData({ ...formData, title: '', amount: '' });
-      // 可以在这里添加跳转逻辑，例如 router.push('/dashboard')
+      // 注意：此处不再立即跳转，而是等待 useEffect 里的 isSuccess
+      toast.info("交易已发送，正在等待链上确认 (请勿关闭页面)...");
 
     } catch (error: any) {
       console.error(error);
@@ -93,13 +117,14 @@ export default function CreateOrderPage() {
         </CardHeader>
         <CardContent className="space-y-6">
           
-          {/* 1. 项目基本信息 */}
+          {/* 表单区域 */}
           <div className="space-y-2">
             <Label>需求标题</Label>
             <Input 
               placeholder="例如：开发一个 React 官网" 
               value={formData.title}
               onChange={(e) => setFormData({...formData, title: e.target.value})}
+              disabled={isPending}
             />
           </div>
 
@@ -110,10 +135,10 @@ export default function CreateOrderPage() {
               className="h-32"
               value={formData.description}
               onChange={(e) => setFormData({...formData, description: e.target.value})}
+              disabled={isPending}
             />
           </div>
 
-          {/* 2. 交易对象与金额 */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>乙方钱包地址 (接单方)</Label>
@@ -122,6 +147,7 @@ export default function CreateOrderPage() {
                 className="font-mono"
                 value={formData.sellerAddress}
                 onChange={(e) => setFormData({...formData, sellerAddress: e.target.value})}
+                disabled={isPending}
               />
             </div>
 
@@ -133,6 +159,7 @@ export default function CreateOrderPage() {
                   placeholder="0.00"
                   value={formData.amount}
                   onChange={(e) => setFormData({...formData, amount: e.target.value})}
+                  disabled={isPending}
                 />
                 <div className="absolute right-3 top-2.5 text-sm text-gray-500 font-bold">
                   USDT
@@ -141,7 +168,6 @@ export default function CreateOrderPage() {
             </div>
           </div>
 
-          {/* 3. 风控设置 */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-lg border border-slate-100">
             <div className="space-y-2">
               <Label className="flex items-center gap-1">
@@ -151,10 +177,8 @@ export default function CreateOrderPage() {
                 type="number" 
                 value={formData.duration}
                 onChange={(e) => setFormData({...formData, duration: e.target.value})}
+                disabled={isPending}
               />
-              <p className="text-xs text-slate-500">
-                合约记录时间: {formData.duration} 小时
-              </p>
             </div>
 
             <div className="space-y-2">
@@ -167,21 +191,18 @@ export default function CreateOrderPage() {
                 placeholder="0"
                 value="0"
               />
-              <p className="text-xs text-slate-500">
-                当前版本暂不支持自定义质押金
-              </p>
             </div>
           </div>
 
           <Button 
             className="w-full bg-blue-600 hover:bg-blue-700 text-lg py-6"
             onClick={handleCreate}
-            disabled={isPending}
+            disabled={isPending} // 交易过程中禁用按钮
           >
             {isPending ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                正在上链...
+                {hash ? "等待链上确认..." : "正在请求签名..."}
               </>
             ) : (
               "创建并发布合约"
