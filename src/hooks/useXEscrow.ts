@@ -1,10 +1,9 @@
 import { useState, useCallback } from 'react';
-import { useWriteContract, useWaitForTransactionReceipt, useAccount } from 'wagmi';
+import { useWriteContract, useWaitForTransactionReceipt, useReadContract, useAccount } from 'wagmi';
 import { parseEther } from 'viem';
 import { ESCROW_ABI, ESCROW_CONTRACT_ADDRESS, ERC20_ABI } from '@/lib/contracts';
 import { toast } from 'sonner';
 
-// 1. 补全 ProjectState 导出
 export enum ProjectState {
   Created = 0,
   Confirmed = 1,
@@ -17,10 +16,12 @@ export enum ProjectState {
   Refunded = 8
 }
 
-export function useXEscrow() {
+// 修改 Hook 定义，允许传入可选的 projectId
+export function useXEscrow(projectId?: bigint) {
   const [isLoading, setIsLoading] = useState(false);
   const { address } = useAccount();
 
+  // --- 写操作 (Write) ---
   const { 
     data: hash, 
     writeContract, 
@@ -32,7 +33,55 @@ export function useXEscrow() {
     hash,
   });
 
-  // 授权代币 (USDT等)
+  // --- 读操作 (Read) ---
+  // 从链上读取项目详情
+  const { data: projectRaw, refetch } = useReadContract({
+    address: ESCROW_CONTRACT_ADDRESS,
+    abi: ESCROW_ABI,
+    functionName: 'projects',
+    args: projectId ? [projectId] : undefined,
+    query: {
+      enabled: !!projectId, // 只有当 projectId 存在时才查询
+    }
+  });
+
+  // 将数组格式的返回值转换为对象格式
+  let project = undefined;
+  if (projectRaw && Array.isArray(projectRaw)) {
+    const [
+      buyer, 
+      seller, 
+      tokenAddress, 
+      amount, 
+      sellerDeposit, 
+      terms, 
+      duration, 
+      deadline, 
+      state, 
+      extensionProposedSeconds, 
+      extensionProposer, 
+      confirmTime, 
+      workSubmittedTime
+    ] = projectRaw as any;
+
+    project = {
+      buyer, 
+      seller, 
+      tokenAddress, 
+      amount, 
+      sellerDeposit, 
+      terms, 
+      duration, 
+      deadline, 
+      state, 
+      extensionProposedSeconds, 
+      extensionProposer, 
+      confirmTime, 
+      workSubmittedTime
+    };
+  }
+
+  // --- 动作函数 ---
   const approveToken = useCallback((tokenAddress: string, amountStr: string) => {
     if (!tokenAddress || !amountStr) {
       toast.error("授权参数缺失");
@@ -46,8 +95,6 @@ export function useXEscrow() {
     });
   }, [writeContract]);
 
-  // 创建订单 - 修正参数顺序以匹配 XEscrowV3_9
-  // Solidity: (address _seller, string _terms, uint256 _durationInHours, address _tokenAddress, uint256 _amount, uint256 _sellerDepositAmount)
   const createProject = useCallback(async (
     title: string,
     amountStr: string,
@@ -66,12 +113,12 @@ export function useXEscrow() {
         abi: ESCROW_ABI,
         functionName: 'createProject',
         args: [
-          sellerAddress as `0x${string}`, // _seller
-          title,                          // _terms
-          BigInt(durationDays * 24),      // _durationInHours (将天数转换为小时)
-          tokenAddress as `0x${string}`,  // _tokenAddress
-          parseEther(amountStr),          // _amount
-          BigInt(0)                       // _sellerDepositAmount (暂时默认为0)
+          sellerAddress as `0x${string}`,
+          title,
+          BigInt(durationDays * 24),
+          tokenAddress as `0x${string}`,
+          parseEther(amountStr),
+          BigInt(0)
         ],
       });
     } catch (err: any) {
@@ -81,63 +128,70 @@ export function useXEscrow() {
     }
   }, [writeContract]);
 
-  const depositFunds = useCallback((projectId: string) => {
+  const depositFunds = useCallback((projectIdStr: string) => {
     writeContract({
       address: ESCROW_CONTRACT_ADDRESS,
       abi: ESCROW_ABI,
       functionName: 'depositFunds',
-      args: [BigInt(projectId)],
+      args: [BigInt(projectIdStr)],
     });
   }, [writeContract]);
 
-  const confirmProject = useCallback((projectId: string) => {
+  const confirmProject = useCallback((projectIdStr: string) => {
     writeContract({
       address: ESCROW_CONTRACT_ADDRESS,
       abi: ESCROW_ABI,
       functionName: 'confirmProject',
-      args: [BigInt(projectId)],
+      args: [BigInt(projectIdStr)],
     });
   }, [writeContract]);
 
-  const submitWork = useCallback((projectId: string) => {
+  const submitWork = useCallback((projectIdStr: string) => {
     writeContract({
       address: ESCROW_CONTRACT_ADDRESS,
       abi: ESCROW_ABI,
       functionName: 'submitWork',
-      args: [BigInt(projectId)],
+      args: [BigInt(projectIdStr)],
     });
   }, [writeContract]);
 
-  const completeProject = useCallback((projectId: string) => {
+  const completeProject = useCallback((projectIdStr: string) => {
     writeContract({
       address: ESCROW_CONTRACT_ADDRESS,
       abi: ESCROW_ABI,
       functionName: 'completeProject',
-      args: [BigInt(projectId)],
+      args: [BigInt(projectIdStr)],
     });
   }, [writeContract]);
 
-  // 计算总的加载状态
   const overallLoading = isLoading || isWritePending || isConfirming;
 
   return {
+    // 读数据
+    project,
+    refetch,
+    
+    // 写操作
     createProject,
     confirmProject,
     depositFunds,
     submitWork,
     completeProject,
     approveToken,
+    
+    // 状态
     isLoading: overallLoading,
     isPending: overallLoading, 
     isSuccess: isConfirmed,
     hash,
     error: writeError,
+    
+    // 别名兼容
     createEscrow: createProject, 
     payEscrow: depositFunds 
   };
 }
 
-// 2. 补全默认导出和别名导出，确保其他组件引用不报错
 export const useEscrowActions = useXEscrow;
 export const useProject = useXEscrow;
 export default useXEscrow;
