@@ -27,17 +27,27 @@ export default function CreateOrderPage() {
   useEffect(() => {
     if (isSuccess && hash) {
       const syncAndRedirect = async () => {
-        const toastId = toast.loading("链上已确认，正在同步订单...");
+        const toastId = toast.loading("链上已确认，正在写入数据库...");
         try {
-          // --- 核心修改：调用刚写好的 sync 接口 ---
-          await fetch('/api/sync'); 
+          const res = await fetch('/api/sync');
+          const data = await res.json();
+          
+          if (!res.ok) {
+             throw new Error(data.error || "同步接口报错");
+          }
           
           toast.dismiss(toastId);
-          toast.success("订单同步成功！即将跳转...");
+          toast.success(`同步完成！(新增 ${data.synced} 单)`);
+          
+          // 延迟跳转，确保用户看清
           setTimeout(() => router.push('/dashboard'), 1500);
-        } catch (e) {
-          toast.error("同步超时，请稍后在列表页手动刷新");
-          router.push('/dashboard');
+
+        } catch (e: any) {
+          toast.dismiss(toastId);
+          console.error("Sync failed:", e);
+          toast.error("订单已上链，但同步显示失败: " + e.message);
+          // 即使同步失败，也跳转，因为钱已经付了
+          setTimeout(() => router.push('/dashboard'), 3000);
         }
       };
       syncAndRedirect();
@@ -60,7 +70,7 @@ export default function CreateOrderPage() {
         durationInDays,
         formData.deposit 
       );
-      toast.info("交易已发送，请等待链上确认...");
+      toast.info("交易已发送，请耐心等待链上确认...");
     } catch (error: any) {
       console.error(error);
       toast.error(error.message?.includes("User rejected") ? "用户取消签名" : "创建失败");
@@ -85,7 +95,7 @@ export default function CreateOrderPage() {
             <div className="space-y-2"><Label className="flex items-center gap-1"><Clock className="w-4 h-4" /> 交付周期 (小时)</Label><Input type="number" value={formData.duration} onChange={(e) => setFormData({...formData, duration: e.target.value})} disabled={isPending} /></div>
             <div className="space-y-2"><Label className="flex items-center gap-1"><Coins className="w-4 h-4" /> 乙方质押金 (USDT)</Label><Input type="number" placeholder="0" value={formData.deposit} onChange={(e) => setFormData({...formData, deposit: e.target.value})} disabled={isPending} /><p className="text-xs text-slate-500">如无质押要求请填 0</p></div>
           </div>
-          <Button className="w-full bg-blue-600 py-6" onClick={handleCreate} disabled={isPending}>{isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> {hash ? "等待上链..." : "等待签名..."}</> : "创建并发布合约"}</Button>
+          <Button className="w-full bg-blue-600 py-6" onClick={handleCreate} disabled={isPending}>{isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> {hash ? "正在上链确认..." : "等待签名..."}</> : "创建并发布合约"}</Button>
         </CardContent>
       </Card>
     </div>
