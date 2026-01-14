@@ -8,13 +8,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { Loader2, ShieldCheck, Clock, Coins } from 'lucide-react';
 import { useEscrowActions } from '@/hooks/useXEscrow';
 
-// 默认代币地址 (BSC USDT - 这里暂时用你合约里支持的，测试时可用 Mock)
-// 如果是测试网，请换成测试网的 USDT 地址
+// 默认代币地址 (BSC USDT)
 const DEFAULT_TOKEN = "0x55d398326f99059fF775485246999027B3197955"; 
 
 export default function CreateOrderPage() {
@@ -28,7 +26,7 @@ export default function CreateOrderPage() {
     description: '',
     sellerAddress: '',
     amount: '',
-    deposit: '0', // 默认 0 质押
+    deposit: '0', 
     duration: '24', // 默认 24 小时
     token: 'USDT'
   });
@@ -45,33 +43,33 @@ export default function CreateOrderPage() {
     }
 
     try {
-      // 1. 调用 Hook 写入链上
-      // 参数: 卖家, 条款(JSON), 工期(小时), 代币地址, 金额, 质押金
+      // 构造存储在合约上的 Terms 字符串
       const terms = JSON.stringify({ 
         title: formData.title, 
         desc: formData.description 
       });
       
-      const tx = await createProject(
-        formData.sellerAddress,
-        terms,
-        Number(formData.duration),
-        DEFAULT_TOKEN, 
-        formData.amount,
-        formData.deposit
+      // 转换时间：页面输入是小时，Hook 接收天数 (内部会 * 24 转回小时)
+      // 所以这里我们传 hours / 24
+      const durationInDays = Number(formData.duration) / 24;
+
+      // 调用 Hook (参数顺序已修正)
+      await createProject(
+        terms,                  // 1. title (terms)
+        formData.amount,        // 2. amountStr
+        formData.sellerAddress, // 3. sellerAddress
+        DEFAULT_TOKEN,          // 4. tokenAddress
+        durationInDays          // 5. durationDays
       );
 
-      console.log("Tx Hash:", tx);
       toast.success("订单创建成功！等待链上确认...");
       
-      // 2. 跳转到列表页 (稍后开发)
-      // router.push('/dashboard'); 
-      // 暂时重置表单
+      // 重置关键表单项
       setFormData({ ...formData, title: '', amount: '' });
+      // 可以在这里添加跳转逻辑，例如 router.push('/dashboard')
 
     } catch (error: any) {
       console.error(error);
-      // 提取错误信息
       const msg = error.message || "创建失败";
       if (msg.includes("User rejected")) {
         toast.warning("用户取消了签名");
@@ -143,7 +141,7 @@ export default function CreateOrderPage() {
             </div>
           </div>
 
-          {/* 3. 风控设置 (防卡死逻辑的核心) */}
+          {/* 3. 风控设置 */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-lg border border-slate-100">
             <div className="space-y-2">
               <Label className="flex items-center gap-1">
@@ -155,22 +153,22 @@ export default function CreateOrderPage() {
                 onChange={(e) => setFormData({...formData, duration: e.target.value})}
               />
               <p className="text-xs text-slate-500">
-                超过 {formData.duration} 小时未交付将显示“已超时”，但允许继续进行。
+                合约记录时间: {formData.duration} 小时
               </p>
             </div>
 
             <div className="space-y-2">
               <Label className="flex items-center gap-1">
-                <Coins className="w-4 h-4" /> 乙方质押金 (选填)
+                <Coins className="w-4 h-4" /> 乙方质押金 (暂不支持)
               </Label>
               <Input 
                 type="number" 
+                disabled
                 placeholder="0"
-                value={formData.deposit}
-                onChange={(e) => setFormData({...formData, deposit: e.target.value})}
+                value="0"
               />
               <p className="text-xs text-slate-500">
-                接单方需先缴纳此金额才能接单。
+                当前版本暂不支持自定义质押金
               </p>
             </div>
           </div>
