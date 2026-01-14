@@ -3,7 +3,7 @@ import { useEffect, useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/card';
-import { Send, MessageSquare, Loader2, RefreshCw } from 'lucide-react';
+import { Send, MessageSquare, Loader2 } from 'lucide-react';
 import { useAccount } from 'wagmi';
 import { toast } from 'sonner';
 
@@ -19,7 +19,8 @@ export function ChatRoom({ orderId, currentUser }: { orderId: string, currentUse
     let isMounted = true;
     const fetchMessages = async () => {
       try {
-        const res = await fetch(\`/api/messages?orderId=\${orderId}\`);
+        // 修正点：去掉了多余的反斜杠
+        const res = await fetch(`/api/messages?orderId=${orderId}`);
         if (res.ok) {
           const data = await res.json();
           if (isMounted && Array.isArray(data)) {
@@ -63,8 +64,8 @@ export function ChatRoom({ orderId, currentUser }: { orderId: string, currentUse
 
       if (!res.ok) throw new Error("发送失败");
 
-      // 发送成功后立刻刷新
-      const refreshRes = await fetch(\`/api/messages?orderId=\${orderId}\`);
+      // 发送成功后立刻刷新，修正点：去掉了多余的反斜杠
+      const refreshRes = await fetch(`/api/messages?orderId=${orderId}`);
       const newData = await refreshRes.json();
       setMessages(newData);
       setTimeout(() => scrollRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
@@ -103,10 +104,10 @@ export function ChatRoom({ orderId, currentUser }: { orderId: string, currentUse
         {messages.map((msg, i) => {
           const isMe = msg.sender?.walletAddress?.toLowerCase() === address?.toLowerCase();
           return (
-            <div key={i} className={`flex \${isMe ? 'justify-end' : 'justify-start'}`}>
-              <div className={`max-w-[85%] rounded-2xl px-4 py-2 text-sm shadow-sm \${isMe ? 'bg-blue-600 text-white rounded-br-none' : 'bg-slate-100 text-slate-800 border border-slate-200 rounded-bl-none'}`}>
+            <div key={i} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
+              <div className={`max-w-[85%] rounded-2xl px-4 py-2 text-sm shadow-sm ${isMe ? 'bg-blue-600 text-white rounded-br-none' : 'bg-slate-100 text-slate-800 border border-slate-200 rounded-bl-none'}`}>
                 <div className="break-all whitespace-pre-wrap">{msg.content}</div>
-                <div className={`text-[10px] mt-1 text-right \${isMe ? 'text-blue-200' : 'text-slate-400'}`}>
+                <div className={`text-[10px] mt-1 text-right ${isMe ? 'text-blue-200' : 'text-slate-400'}`}>
                   {new Date(msg.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                 </div>
               </div>
