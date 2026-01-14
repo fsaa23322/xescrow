@@ -3,9 +3,9 @@
 import { useEffect, useState } from 'react';
 import { useAccount } from 'wagmi';
 import Link from 'next/link';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, ArrowRight } from 'lucide-react';
+import { Loader2, ArrowRight, MessageCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 export default function DashboardPage() {
@@ -16,7 +16,6 @@ export default function DashboardPage() {
   useEffect(() => {
     if (address) {
       setLoading(true);
-      // 调用我们在后端写好的 API，根据地址拉取订单
       fetch(`/api/orders?address=${address}`)
         .then(res => res.json())
         .then(data => {
@@ -54,18 +53,28 @@ export default function DashboardPage() {
       ) : (
         <div className="grid gap-4">
           {orders.map((order) => {
-            // 判断我是买家还是卖家
             const isBuyer = order.buyer?.walletAddress.toLowerCase() === address?.toLowerCase();
             const role = isBuyer ? '买家 (甲方)' : '卖家 (乙方)';
             
+            // 判断是否有新消息：最新一条消息存在，且发送者不是我
+            const lastMsg = order.messages && order.messages[0];
+            const hasNewMsg = lastMsg && lastMsg.sender?.walletAddress.toLowerCase() !== address?.toLowerCase();
+            
             return (
               <Link key={order.id} href={`/order/${order.shortId}`}>
-                <Card className="hover:shadow-md transition cursor-pointer border-l-4 border-l-blue-500">
+                <Card className="hover:shadow-md transition cursor-pointer border-l-4 border-l-blue-500 relative">
                   <CardHeader className="flex flex-row items-center justify-between py-4">
                     <div className="flex flex-col gap-1">
                       <div className="flex items-center gap-3">
                         <Badge variant="outline" className="font-mono">#{order.shortId}</Badge>
-                        <CardTitle className="text-lg">{order.title}</CardTitle>
+                        <CardTitle className="text-lg flex items-center gap-2">
+                          {order.title}
+                          {hasNewMsg && (
+                            <Badge variant="destructive" className="h-5 px-1.5 text-[10px] flex items-center gap-1">
+                              <MessageCircle className="w-3 h-3" /> 新消息
+                            </Badge>
+                          )}
+                        </CardTitle>
                         <Badge className={isBuyer ? "bg-blue-100 text-blue-800" : "bg-purple-100 text-purple-800"}>
                           {role}
                         </Badge>

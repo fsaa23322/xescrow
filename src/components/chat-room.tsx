@@ -3,29 +3,31 @@ import { useEffect, useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/card';
-import { Send, MessageSquare, Loader2 } from 'lucide-react';
+import { Send, MessageSquare, Loader2, Lock } from 'lucide-react';
 import { useAccount } from 'wagmi';
 import { toast } from 'sonner';
 
-export function ChatRoom({ orderId, currentUser }: { orderId: string, currentUser: any }) {
+// 新增 orderStatus 属性
+export function ChatRoom({ orderId, currentUser, orderStatus }: { orderId: string, currentUser: any, orderStatus?: number }) {
   const [messages, setMessages] = useState<any[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const { address } = useAccount();
 
-  // 轮询逻辑：每 2 秒获取一次
+  // 状态 2 是 InProgress。小于 2 (Created, Confirmed) 时不允许聊天。
+  // 也可以根据需要允许 Disputed(4) 等状态。这里只要 >= 2 即可。
+  const isChatEnabled = orderStatus !== undefined && orderStatus >= 2;
+
   useEffect(() => {
     let isMounted = true;
     const fetchMessages = async () => {
       try {
-        // 修正点：去掉了多余的反斜杠
         const res = await fetch(`/api/messages?orderId=${orderId}`);
         if (res.ok) {
           const data = await res.json();
           if (isMounted && Array.isArray(data)) {
             setMessages(prev => {
-              // 只有当有新消息时才滚动
               if (data.length > prev.length) {
                 setTimeout(() => scrollRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
               }
@@ -39,13 +41,13 @@ export function ChatRoom({ orderId, currentUser }: { orderId: string, currentUse
     };
 
     fetchMessages();
-    const interval = setInterval(fetchMessages, 2000); // 2秒刷新一次
+    const interval = setInterval(fetchMessages, 2000); 
 
     return () => { isMounted = false; clearInterval(interval); };
   }, [orderId]);
 
   const sendMessage = async () => {
-    if (!input.trim() || !address) return;
+    if (!input.trim() || !address || !isChatEnabled) return;
     
     const tempContent = input;
     setInput(''); 
@@ -64,7 +66,6 @@ export function ChatRoom({ orderId, currentUser }: { orderId: string, currentUse
 
       if (!res.ok) throw new Error("发送失败");
 
-      // 发送成功后立刻刷新，修正点：去掉了多余的反斜杠
       const refreshRes = await fetch(`/api/messages?orderId=${orderId}`);
       const newData = await refreshRes.json();
       setMessages(newData);
@@ -85,19 +86,26 @@ export function ChatRoom({ orderId, currentUser }: { orderId: string, currentUse
           <MessageSquare className="w-4 h-4 text-blue-600" /> 
           安全交易聊天室
           <span className="text-xs ml-auto text-green-600 flex items-center gap-1 bg-green-50 px-2 py-0.5 rounded-full border border-green-200">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
-            </span>
             已加密连接
           </span>
         </CardTitle>
       </CardHeader>
       
-      <CardContent className="flex-1 overflow-y-auto p-4 space-y-4 bg-white">
+      <CardContent className="flex-1 overflow-y-auto p-4 space-y-4 bg-white relative">
+        {/* 如果聊天未开启，显示遮罩层 */}
+        {!isChatEnabled && (
+          <div className="absolute inset-0 bg-slate-50/80 backdrop-blur-sm z-10 flex flex-col items-center justify-center p-6 text-center">
+            <Lock className="w-10 h-10 text-slate-400 mb-2" />
+            <h3 className="font-bold text-slate-700">聊天功能未开启</h3>
+            <p className="text-sm text-slate-500 mt-1">
+              当订单进入“进行中”状态（双方确认并支付后），聊天功能将自动解锁以便进行工作对接或纠纷举证。
+            </p>
+          </div>
+        )}
+
         {messages.length === 0 && (
           <div className="text-center text-slate-400 text-sm mt-20">
-            <p>暂无消息，开始沟通吧</p>
+            <p>暂无消息</p>
           </div>
         )}
         
@@ -122,12 +130,12 @@ export function ChatRoom({ orderId, currentUser }: { orderId: string, currentUse
           <Input 
             value={input} 
             onChange={(e) => setInput(e.target.value)} 
-            onKeyDown={(e) => e.key === 'Enter' && !loading && sendMessage()} 
-            placeholder="输入消息..." 
+            onKeyDown={(e) => e.key === 'Enter' && !loading && isChatEnabled && sendMessage()} 
+            placeholder={isChatEnabled ? "输入消息..." : "聊天已锁定"} 
             className="flex-1 bg-white" 
-            disabled={loading}
+            disabled={loading || !isChatEnabled}
           />
-          <Button size="icon" onClick={sendMessage} disabled={loading || !input.trim()} className="bg-blue-600">
+          <Button size="icon" onClick={sendMessage} disabled={loading || !input.trim() || !isChatEnabled} className="bg-blue-600">
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
           </Button>
         </div>

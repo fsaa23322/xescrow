@@ -22,7 +22,6 @@ export default function OrderDetailPage() {
       fetch(`/api/orders?id=${id}`)
         .then(res => res.json())
         .then(data => {
-           // API 现在会返回数组，我们需要找到匹配的
            if (Array.isArray(data)) {
              const found = data.find((o: any) => o.shortId === id);
              setOrderDB(found);
@@ -37,6 +36,10 @@ export default function OrderDetailPage() {
   const isBuyer = address?.toLowerCase() === orderDB.buyer.walletAddress.toLowerCase();
   const isSeller = address?.toLowerCase() === orderDB.seller.walletAddress.toLowerCase();
   const currentUser = isBuyer ? orderDB.buyer : orderDB.seller;
+
+  // 0=Created, 1=Confirmed(已接单/已质押), 2=InProgress(已付款), 3=WorkSubmitted...
+  // 聊天只有在 "InProgress" (2) 及之后开启
+  const orderStatus = contractData.state;
 
   return (
     <div className="container mx-auto py-8 px-4 h-[calc(100vh-64px)]">
@@ -62,7 +65,10 @@ export default function OrderDetailPage() {
             </div>
           </div>
         </div>
-        <div className="lg:col-span-1 h-full"><ChatRoom orderId={id} currentUser={currentUser} /></div>
+        {/* 传递状态给聊天室 */}
+        <div className="lg:col-span-1 h-full">
+            <ChatRoom orderId={id} currentUser={currentUser} orderStatus={orderStatus} />
+        </div>
       </div>
     </div>
   );

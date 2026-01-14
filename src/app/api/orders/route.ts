@@ -7,7 +7,7 @@ export async function GET(request: Request) {
     const address = searchParams.get('address');
     const id = searchParams.get('id');
 
-    // 1. 详情页查询逻辑
+    // 1. 详情页查询逻辑 (保持不变，但确保包含买卖双方信息)
     if (id) {
       const order = await prisma.order.findFirst({
         where: {
@@ -24,13 +24,11 @@ export async function GET(request: Request) {
       });
       
       if (!order) return NextResponse.json({ error: "Order not found" }, { status: 404 });
-      // 为了兼容前端可能的数组处理逻辑，这里返回数组
       return NextResponse.json([order]);
     }
 
-    // 2. 列表页查询逻辑
+    // 2. 列表页查询逻辑 (新增：包含最新消息)
     if (address) {
-      // 关键修复：数据库存的是小写，查询时必须转小写
       const normalizedAddress = address.toLowerCase();
 
       const orders = await prisma.order.findMany({
@@ -41,11 +39,17 @@ export async function GET(request: Request) {
           ]
         },
         include: {
-          buyer: true, // 包含买家信息
-          seller: true, // 包含卖家信息
+          buyer: true,
+          seller: true,
+          // 新增：只取最新的一条消息，用于列表显示提示
+          messages: {
+            take: 1,
+            orderBy: { createdAt: 'desc' },
+            include: { sender: true }
+          }
         },
         orderBy: {
-          createdAt: 'desc' // 新订单排前面
+          createdAt: 'desc'
         }
       });
       
