@@ -34,14 +34,13 @@ export function useXEscrow(projectId?: bigint) {
   });
 
   // --- 读操作 (Read) ---
-  // 从链上读取项目详情
   const { data: projectRaw, refetch } = useReadContract({
     address: ESCROW_CONTRACT_ADDRESS,
     abi: ESCROW_ABI,
     functionName: 'projects',
     args: projectId ? [projectId] : undefined,
     query: {
-      enabled: !!projectId, // 只有当 projectId 存在时才查询
+      enabled: !!projectId, 
     }
   });
 
@@ -81,7 +80,9 @@ export function useXEscrow(projectId?: bigint) {
     };
   }
 
-  // --- 动作函数 ---
+  // --- 动作函数 (Action Functions) ---
+  // 关键修复：参数类型改为 string | bigint 以兼容 action-panel.tsx
+
   const approveToken = useCallback((tokenAddress: string, amountStr: string) => {
     if (!tokenAddress || !amountStr) {
       toast.error("授权参数缺失");
@@ -128,39 +129,39 @@ export function useXEscrow(projectId?: bigint) {
     }
   }, [writeContract]);
 
-  const depositFunds = useCallback((projectIdStr: string) => {
+  const depositFunds = useCallback((id: string | bigint) => {
     writeContract({
       address: ESCROW_CONTRACT_ADDRESS,
       abi: ESCROW_ABI,
       functionName: 'depositFunds',
-      args: [BigInt(projectIdStr)],
+      args: [BigInt(id.toString())],
     });
   }, [writeContract]);
 
-  const confirmProject = useCallback((projectIdStr: string) => {
+  const confirmProject = useCallback((id: string | bigint) => {
     writeContract({
       address: ESCROW_CONTRACT_ADDRESS,
       abi: ESCROW_ABI,
       functionName: 'confirmProject',
-      args: [BigInt(projectIdStr)],
+      args: [BigInt(id.toString())],
     });
   }, [writeContract]);
 
-  const submitWork = useCallback((projectIdStr: string) => {
+  const submitWork = useCallback((id: string | bigint) => {
     writeContract({
       address: ESCROW_CONTRACT_ADDRESS,
       abi: ESCROW_ABI,
       functionName: 'submitWork',
-      args: [BigInt(projectIdStr)],
+      args: [BigInt(id.toString())],
     });
   }, [writeContract]);
 
-  const completeProject = useCallback((projectIdStr: string) => {
+  const completeProject = useCallback((id: string | bigint) => {
     writeContract({
       address: ESCROW_CONTRACT_ADDRESS,
       abi: ESCROW_ABI,
       functionName: 'completeProject',
-      args: [BigInt(projectIdStr)],
+      args: [BigInt(id.toString())],
     });
   }, [writeContract]);
 
