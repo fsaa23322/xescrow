@@ -1,0 +1,93 @@
+// 1. 生成器配置
+generator client {
+  provider = "prisma-client-js"
+}
+
+// 2. 数据源配置 (回归经典写法，直接读 .env)
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// 3. 交易状态机
+enum OrderStatus {
+  CREATED
+  AGREED
+  STAKED
+  LOCKED
+  DELIVERED
+  COMPLETED
+  CANCELLED
+  DISPUTED
+  REFUNDED
+}
+
+// 4. 数据模型
+model User {
+  id            String    @id @default(cuid())
+  walletAddress String    @unique
+  nonce         String?
+  nickname      String?
+  avatar        String?
+  rating        Float     @default(5.0)
+  createdAt     DateTime  @default(now())
+  
+  ordersAsBuyer  Order[]  @relation("BuyerOrders")
+  ordersAsSeller Order[]  @relation("SellerOrders")
+  messages       Message[]
+  evidences      Evidence[]
+
+  @@map("users")
+}
+
+model Order {
+  id            String      @id @default(cuid())
+  shortId       String      @unique
+  title         String
+  description   String      @db.Text
+  amount        String
+  tokenSymbol   String      @default("USDT")
+  daysToDeliver Int
+  status        OrderStatus @default(CREATED)
+  contractId    String?
+  txHash        String?
+  
+  buyerId       String
+  buyer         User        @relation("BuyerOrders", fields: [buyerId], references: [id])
+  sellerId      String?
+  seller        User?       @relation("SellerOrders", fields: [sellerId], references: [id])
+
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  messages      Message[]
+  evidences     Evidence[]
+
+  @@map("orders")
+}
+
+model Message {
+  id        String   @id @default(cuid())
+  content   String   @db.Text
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id])
+  senderId  String
+  sender    User     @relation(fields: [senderId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@map("messages")
+}
+
+model Evidence {
+  id        String   @id @default(cuid())
+  fileUrl   String
+  fileType  String
+  description String?
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id])
+  uploaderId String
+  uploader  User     @relation(fields: [uploaderId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@map("evidences")
+}
