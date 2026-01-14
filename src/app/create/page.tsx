@@ -29,7 +29,9 @@ export default function CreateOrderPage() {
       const syncAndRedirect = async () => {
         const toastId = toast.loading("链上已确认，正在同步订单...");
         try {
-          await fetch('/api/orders'); // 尝试触发同步
+          // --- 核心修改：调用刚写好的 sync 接口 ---
+          await fetch('/api/sync'); 
+          
           toast.dismiss(toastId);
           toast.success("订单同步成功！即将跳转...");
           setTimeout(() => router.push('/dashboard'), 1500);
@@ -56,7 +58,7 @@ export default function CreateOrderPage() {
         formData.sellerAddress, 
         DEFAULT_TOKEN,          
         durationInDays,
-        formData.deposit // 传入质押金
+        formData.deposit 
       );
       toast.info("交易已发送，请等待链上确认...");
     } catch (error: any) {
@@ -81,7 +83,6 @@ export default function CreateOrderPage() {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-lg border border-slate-100">
             <div className="space-y-2"><Label className="flex items-center gap-1"><Clock className="w-4 h-4" /> 交付周期 (小时)</Label><Input type="number" value={formData.duration} onChange={(e) => setFormData({...formData, duration: e.target.value})} disabled={isPending} /></div>
-            {/* 启用质押金输入 */}
             <div className="space-y-2"><Label className="flex items-center gap-1"><Coins className="w-4 h-4" /> 乙方质押金 (USDT)</Label><Input type="number" placeholder="0" value={formData.deposit} onChange={(e) => setFormData({...formData, deposit: e.target.value})} disabled={isPending} /><p className="text-xs text-slate-500">如无质押要求请填 0</p></div>
           </div>
           <Button className="w-full bg-blue-600 py-6" onClick={handleCreate} disabled={isPending}>{isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> {hash ? "等待上链..." : "等待签名..."}</> : "创建并发布合约"}</Button>
